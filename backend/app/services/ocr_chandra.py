@@ -1,4 +1,4 @@
-"""Chandra OCR Service using HuggingFace Inference API"""
+"""OCR Service using OCR.space free API"""
 import logging
 import base64
 import io
@@ -13,16 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 class ChandraOCRService:
-    """OCR service using Chandra model via HuggingFace Inference API"""
+    """OCR service using OCR.space free API (reliable, no auth needed)"""
 
     def __init__(self):
-        self.api_url = "https://api-inference.huggingface.co/models/datalab-to/chandra"
-        self.headers = {}
-
-        # Use HF token if provided in environment
-        hf_token = getattr(settings, 'HUGGINGFACE_API_TOKEN', None)
-        if hf_token:
-            self.headers["Authorization"] = f"Bearer {hf_token}"
+        # Use OCR.space free API - more reliable than HuggingFace inference
+        self.api_url = "https://api.ocr.space/parse/image"
+        self.api_key = "helloworld"  # Free public API key
 
     async def extract_text_from_bytes(
         self,
@@ -50,37 +46,56 @@ class ChandraOCRService:
             image.save(img_byte_arr, format='JPEG', quality=95)
             img_byte_arr = img_byte_arr.getvalue()
 
-            # Call HuggingFace Inference API
-            logger.info(f"Calling Chandra API for OCR, image size: {len(img_byte_arr)} bytes")
+            # Call OCR.space API
+            logger.info(f"Calling OCR.space API, image size: {len(img_byte_arr)} bytes")
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                request_headers = {**self.headers, "Content-Type": "image/jpeg"}
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # OCR.space expects base64 encoded image
+                img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
+
+                payload = {
+                    'apikey': self.api_key,
+                    'base64Image': f'data:image/jpeg;base64,{img_base64}',
+                    'language': 'eng',  # English
+                    'isOverlayRequired': False,
+                    'detectOrientation': True,
+                    'scale': True,
+                    'OCREngine': 2  # OCR Engine 2 is better for complex text
+                }
+
                 response = await client.post(
                     self.api_url,
-                    headers=request_headers,
-                    content=img_byte_arr
+                    data=payload
                 )
 
-                logger.info(f"Chandra API response: status={response.status_code}")
+                logger.info(f"OCR.space API response: status={response.status_code}")
 
                 if response.status_code == 200:
                     result = response.json()
-                    logger.info(f"Chandra result type: {type(result)}, value: {str(result)[:200]}")
+                    logger.info(f"OCR result: {str(result)[:300]}")
 
-                    # Extract text from Chandra response
-                    extracted_text = self._parse_chandra_response(result)
-                    logger.info(f"Extracted text length: {len(extracted_text)}")
+                    # Parse OCR.space response
+                    if result.get('IsErroredOnProcessing'):
+                        error_msg = result.get('ErrorMessage', ['Unknown error'])[0]
+                        logger.error(f"OCR.space processing error: {error_msg}")
+                        return await self._fallback_ocr(image_bytes, language_hint)
 
-                    return OCRResult(
-                        text=extracted_text,
-                        confidence=0.90,
-                        language=language_hint
-                    )
-                elif response.status_code == 503:
-                    logger.warning("Chandra model is loading, using fallback OCR")
+                    # Extract text from ParsedResults
+                    parsed_results = result.get('ParsedResults', [])
+                    if parsed_results and len(parsed_results) > 0:
+                        extracted_text = parsed_results[0].get('ParsedText', '')
+                        if extracted_text.strip():
+                            logger.info(f"Successfully extracted {len(extracted_text)} characters")
+                            return OCRResult(
+                                text=extracted_text.strip(),
+                                confidence=0.85,
+                                language=language_hint
+                            )
+
+                    logger.warning("No text found in OCR result")
                     return await self._fallback_ocr(image_bytes, language_hint)
                 else:
-                    logger.error(f"Chandra API error: {response.status_code} - {response.text[:500]}")
+                    logger.error(f"OCR.space API error: {response.status_code} - {response.text[:500]}")
                     return await self._fallback_ocr(image_bytes, language_hint)
 
         except Exception as e:
