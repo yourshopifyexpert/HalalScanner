@@ -11,6 +11,11 @@ sqlalchemy==2.0.23
 # Image Processing
 Pillow==10.1.0
 
+# OCR - Chandra model local
+transformers==4.35.2
+torch==2.1.1
+torchvision==0.16.1
+
 # Utilities
 python-dotenv==1.0.0
 httpx==0.25.2
