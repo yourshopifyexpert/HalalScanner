@@ -51,66 +51,82 @@ class ChandraOCRService:
             img_byte_arr = img_byte_arr.getvalue()
 
             # Call HuggingFace Inference API
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            logger.info(f"Calling Chandra API for OCR, image size: {len(img_byte_arr)} bytes")
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                request_headers = {**self.headers, "Content-Type": "image/jpeg"}
                 response = await client.post(
                     self.api_url,
-                    headers=self.headers,
-                    files={"file": ("image.jpg", img_byte_arr, "image/jpeg")},
-                    data={"parameters": '{"task": "ocr"}'}
+                    headers=request_headers,
+                    content=img_byte_arr
                 )
+
+                logger.info(f"Chandra API response: status={response.status_code}")
 
                 if response.status_code == 200:
                     result = response.json()
+                    logger.info(f"Chandra result type: {type(result)}, value: {str(result)[:200]}")
 
                     # Extract text from Chandra response
-                    # Chandra returns structured output, we need to extract the text
                     extracted_text = self._parse_chandra_response(result)
+                    logger.info(f"Extracted text length: {len(extracted_text)}")
 
                     return OCRResult(
                         text=extracted_text,
-                        confidence=0.90,  # Chandra is generally high confidence
+                        confidence=0.90,
                         language=language_hint
                     )
                 elif response.status_code == 503:
-                    # Model is loading, fall back to simple OCR
                     logger.warning("Chandra model is loading, using fallback OCR")
                     return await self._fallback_ocr(image_bytes, language_hint)
                 else:
-                    logger.error(f"Chandra API error: {response.status_code} - {response.text}")
+                    logger.error(f"Chandra API error: {response.status_code} - {response.text[:500]}")
                     return await self._fallback_ocr(image_bytes, language_hint)
 
         except Exception as e:
             logger.error(f"Chandra OCR error: {e}", exc_info=True)
             return await self._fallback_ocr(image_bytes, language_hint)
 
-    def _parse_chandra_response(self, result: dict) -> str:
+    def _parse_chandra_response(self, result) -> str:
         """Parse Chandra's structured output to extract plain text"""
         try:
-            # Chandra typically returns markdown or structured text
-            if isinstance(result, dict):
+            # Chandra can return various formats
+            if isinstance(result, str):
+                # Direct string response
+                return result
+            elif isinstance(result, dict):
                 # Look for common response fields
-                if 'generated_text' in result:
-                    return result['generated_text']
-                elif 'text' in result:
-                    return result['text']
-                elif isinstance(result.get('content'), str):
-                    return result['content']
+                for key in ['generated_text', 'text', 'content', 'output', 'result', 'ocr_text']:
+                    if key in result and isinstance(result[key], str):
+                        return result[key]
             elif isinstance(result, list) and len(result) > 0:
-                if isinstance(result[0], dict) and 'generated_text' in result[0]:
-                    return result[0]['generated_text']
+                # Array of results
+                first_item = result[0]
+                if isinstance(first_item, str):
+                    return first_item
+                elif isinstance(first_item, dict):
+                    for key in ['generated_text', 'text', 'content']:
+                        if key in first_item:
+                            return str(first_item[key])
 
-            # Fallback: convert to string
-            return str(result)
+            # Fallback: convert to string and clean
+            result_str = str(result)
+            logger.warning(f"Using raw result string: {result_str[:100]}")
+            return result_str
         except Exception as e:
             logger.error(f"Error parsing Chandra response: {e}")
-            return str(result)
+            return "Error: Could not parse OCR response"
 
     async def _fallback_ocr(self, image_bytes: bytes, language_hint: str) -> OCRResult:
         """Fallback OCR when Chandra is unavailable"""
+        logger.info("Using fallback OCR - returning demo ingredients")
         # Use simple text extraction as fallback
+        fallback_text = """Ingredients: Water, Sugar, Wheat Flour, Vegetable Oil, Salt, Natural Flavors, Citric Acid
+
+NOTE: OCR service temporarily unavailable. Please enter ingredients manually or try again in a moment."""
         return OCRResult(
-            text="Ingredients: Water, Sugar, Wheat Flour, Vegetable Oil, Salt, Natural Flavors",
-            confidence=0.60,
+            text=fallback_text,
+            confidence=0.50,
             language=language_hint
         )
 
