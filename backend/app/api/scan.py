@@ -8,8 +8,8 @@ import logging
 
 from app.database import get_db
 from app.schemas import ScanRequest, ScanResponse
-from app.services.ocr_service import OCRService
-from app.services.normalizer import IngredientNormalizer
+from app.services.ocr_service_simple import OCRService
+from app.services.normalizer_simple import IngredientNormalizer
 from app.services.classifier import IngredientClassifier
 from app.models import Scan, Product, User
 from app.config import settings

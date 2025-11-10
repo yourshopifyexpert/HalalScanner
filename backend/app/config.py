@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-this-secret-key-in-production"
 
     # Database
-    DATABASE_URL: str = "postgresql://halaluser:halalpass123@localhost:5432/halalscanner"
+    DATABASE_URL: str = "sqlite:///./halalscanner.db"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
