@@ -9,10 +9,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend application code
 COPY backend ./backend
 
-# Copy startup script
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
-
 # Set working directory to backend
 WORKDIR /app/backend
 
@@ -25,5 +21,5 @@ EXPOSE 8000
 # Set environment variables
 ENV PYTHONPATH=/app/backend
 
-# Run the application using startup script
-CMD ["/app/start.sh"]
+# Run the application using Python startup script
+CMD ["python", "run.py"]
