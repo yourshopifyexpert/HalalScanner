@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Mobile and Admin (not needed for backend deployment)
+mobile/
+admin/
+
+# Database (will be created fresh)
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Docker
+Dockerfile.dev
+docker-compose.yml
+docker-compose.dev.yml
