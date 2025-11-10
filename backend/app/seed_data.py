@@ -1,7 +1,7 @@
 """Database seed data initialization"""
 import logging
 from sqlalchemy.orm import Session
-from app.database import SessionLocal, init_db
+from app.database import SessionLocal
 from app.models import (
     RuleDefinition, IngredientMaster, Manufacturer,
     HalalCertification, VerdictLabel, HalalStatus
@@ -302,7 +302,8 @@ def seed_database():
     """Main function to seed all data"""
     logger.info("Starting database seeding...")
 
-    # Initialize database
+    # Initialize database (import here to avoid circular dependency)
+    from app.database import init_db
     init_db()
 
     # Create session
