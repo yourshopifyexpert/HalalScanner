@@ -32,3 +32,28 @@ def init_db():
     """Initialize database (create all tables)"""
     import app.models  # Import models to register them
     Base.metadata.create_all(bind=engine)
+
+    # Seed database with initial data if tables are empty
+    try:
+        from app.seed_data import seed_rules, seed_ingredients, seed_manufacturers
+        from app.models import RuleDefinition
+        import logging
+
+        logger = logging.getLogger(__name__)
+        db = SessionLocal()
+
+        try:
+            # Check if database is already seeded
+            rule_count = db.query(RuleDefinition).count()
+            if rule_count == 0:
+                logger.info("Database is empty. Seeding initial data...")
+                seed_rules(db)
+                seed_ingredients(db)
+                seed_manufacturers(db)
+                logger.info("Database seeded successfully!")
+            else:
+                logger.info(f"Database already contains {rule_count} rules. Skipping seed.")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Error during database seeding: {e}")
