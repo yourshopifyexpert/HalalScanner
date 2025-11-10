@@ -8,7 +8,7 @@ python-multipart==0.0.6
 # Database (SQLite only)
 sqlalchemy==2.0.23
 
-# Image Processing (minimal - for base64 handling)
+# Image Processing
 Pillow==10.1.0
 
 # Utilities

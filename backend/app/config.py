@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     # OCR
     TESSERACT_CMD: Optional[str] = None  # Path to tesseract executable
     OCR_CONFIDENCE_THRESHOLD: float = 0.6
+    HUGGINGFACE_API_TOKEN: Optional[str] = None  # HuggingFace API token for Chandra OCR
 
     # Classification
     CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.7
