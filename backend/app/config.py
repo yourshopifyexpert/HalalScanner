@@ -8,8 +8,8 @@ class Settings(BaseSettings):
 
     # Application
     APP_NAME: str = "HalalScanner API"
-    VERSION: str = "0.1.0"
-    ENVIRONMENT: str = "development"
+    VERSION: str = "0.1.1"
+    ENVIRONMENT: str = "production"
     DEBUG: bool = True
     SECRET_KEY: str = "change-this-secret-key-in-production"
 
