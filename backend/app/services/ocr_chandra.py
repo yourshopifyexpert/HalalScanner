@@ -49,9 +49,10 @@ class ChandraOCRService:
             # Call OCR.space API
             logger.info(f"Calling OCR.space API, image size: {len(img_byte_arr)} bytes")
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 # OCR.space expects base64 encoded image
                 img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
+                logger.info(f"Base64 encoded, length: {len(img_base64)}")
 
                 payload = {
                     'apikey': self.api_key,
@@ -62,6 +63,7 @@ class ChandraOCRService:
                     'scale': True,
                     'OCREngine': 2  # OCR Engine 2 is better for complex text
                 }
+                logger.info("Sending request to OCR.space...")
 
                 response = await client.post(
                     self.api_url,

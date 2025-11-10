@@ -46,26 +46,39 @@ async def scan_product(
         ocr_confidence = 1.0
 
         if not ocr_text and (request.image_base64 or request.image_url):
+            logger.info("Starting OCR extraction...")
             ocr_service = ChandraOCRService()
 
-            if request.image_base64:
-                # Decode base64 image
-                image_data = base64.b64decode(request.image_base64)
-                ocr_result = await ocr_service.extract_text_from_bytes(
-                    image_data,
-                    language_hint=request.language_hint
-                )
-            elif request.image_url:
-                ocr_result = await ocr_service.extract_text_from_url(
-                    request.image_url,
-                    language_hint=request.language_hint
-                )
+            try:
+                if request.image_base64:
+                    logger.info(f"Decoding base64 image, length: {len(request.image_base64)}")
+                    # Decode base64 image
+                    image_data = base64.b64decode(request.image_base64)
+                    logger.info(f"Image decoded, size: {len(image_data)} bytes. Calling OCR...")
 
-            ocr_text = ocr_result.text
-            ocr_confidence = ocr_result.confidence
+                    ocr_result = await ocr_service.extract_text_from_bytes(
+                        image_data,
+                        language_hint=request.language_hint
+                    )
+                    logger.info(f"OCR completed! Extracted text: {ocr_result.text[:100]}")
+                elif request.image_url:
+                    logger.info(f"Fetching image from URL: {request.image_url}")
+                    ocr_result = await ocr_service.extract_text_from_url(
+                        request.image_url,
+                        language_hint=request.language_hint
+                    )
 
-            if ocr_confidence < settings.OCR_CONFIDENCE_THRESHOLD:
-                logger.warning(f"Low OCR confidence: {ocr_confidence}")
+                ocr_text = ocr_result.text
+                ocr_confidence = ocr_result.confidence
+
+                if ocr_confidence < settings.OCR_CONFIDENCE_THRESHOLD:
+                    logger.warning(f"Low OCR confidence: {ocr_confidence}")
+
+            except Exception as e:
+                logger.error(f"OCR extraction failed: {e}", exc_info=True)
+                # Return fallback text instead of failing
+                ocr_text = "Ingredients: Unable to extract text. Please enter ingredients manually."
+                ocr_confidence = 0.0
 
         if not ocr_text:
             raise HTTPException(
