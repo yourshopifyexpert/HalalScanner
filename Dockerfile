@@ -22,5 +22,5 @@ EXPOSE 8000
 ENV PYTHONPATH=/app/backend
 
 # Run the application
-# Using shell form to allow PORT variable substitution from Railway
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Using exec form with sh to handle PORT variable
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
