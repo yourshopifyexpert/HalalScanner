@@ -329,16 +329,61 @@
         // File selection
         fileInput.addEventListener('change', handleFileSelect);
 
-        function handleFileSelect() {
+        let selectedImageBase64 = null;
+
+        async function handleFileSelect() {
             const file = fileInput.files[0];
             if (file) {
                 uploadSection.innerHTML = `
-                    <div class="upload-icon">✅</div>
-                    <h3>Image Selected</h3>
-                    <p style="color: #27ae60; margin-top: 10px;">${file.name}</p>
+                    <div class="upload-icon">⏳</div>
+                    <h3>Processing Image...</h3>
+                    <p style="color: #667eea; margin-top: 10px;">Extracting text from ${file.name}</p>
                 `;
-                // Simulate OCR - in real app this would extract text from image
-                ingredientsInput.value = "Ingredients: Water, Sugar, Wheat Flour, Vegetable Oil, Salt, Yeast, Natural Flavors";
+
+                try {
+                    // Convert image to base64
+                    const reader = new FileReader();
+                    reader.onload = async function(e) {
+                        selectedImageBase64 = e.target.result.split(',')[1]; // Remove data:image/xxx;base64, prefix
+
+                        // Call backend OCR to extract text
+                        const response = await fetch('/api/v1/scan/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                user_id: 'web_user_' + Date.now(),
+                                image_base64: selectedImageBase64,
+                                language_hint: 'en'
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        // Update UI with extracted text
+                        uploadSection.innerHTML = `
+                            <div class="upload-icon">✅</div>
+                            <h3>Text Extracted!</h3>
+                            <p style="color: #27ae60; margin-top: 10px;">${file.name}</p>
+                        `;
+
+                        // Fill text box with extracted ingredients
+                        ingredientsInput.value = data.ocr_text || "No text detected. Please enter ingredients manually.";
+
+                        // Automatically display results
+                        displayResult(data);
+                        resultSection.classList.remove('hidden');
+                    };
+                    reader.readAsDataURL(file);
+                } catch (error) {
+                    uploadSection.innerHTML = `
+                        <div class="upload-icon">❌</div>
+                        <h3>OCR Failed</h3>
+                        <p style="color: #e74c3c; margin-top: 10px;">Please enter ingredients manually</p>
+                    `;
+                    console.error('OCR Error:', error);
+                }
             }
         }
 
