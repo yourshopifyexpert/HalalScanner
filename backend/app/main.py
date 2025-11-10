@@ -1,10 +1,12 @@
 """Main FastAPI application"""
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
 import time
+import os
 
 from app.config import settings
 from app.database import init_db
@@ -102,13 +104,23 @@ async def health_check():
     }
 
 
+# Mount static files
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """Serve the web interface"""
+    static_file = os.path.join(static_dir, "index.html")
+    if os.path.exists(static_file):
+        return FileResponse(static_file)
     return {
         "message": "HalalScanner API",
         "version": settings.VERSION,
-        "docs": "/docs" if settings.DEBUG else "disabled"
+        "docs": "/docs" if settings.DEBUG else "disabled",
+        "web_app": "/static/index.html"
     }
 
 
