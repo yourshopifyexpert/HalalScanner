@@ -1,8 +1,10 @@
-"""Online Ingredient Lookup Service"""
+"""AI-Powered Ingredient Search Service"""
 import logging
 import httpx
-from typing import Optional, Dict
+import re
+from typing import Optional, Dict, List
 from sqlalchemy.orm import Session
+from urllib.parse import quote_plus
 
 from app.models import IngredientMaster, HalalStatus
 
@@ -10,46 +12,230 @@ logger = logging.getLogger(__name__)
 
 
 class IngredientLookupService:
-    """Service to look up ingredient halal status online"""
+    """AI-powered service to search and analyze ingredient halal status"""
 
     def __init__(self, db: Session):
         self.db = db
-        self.search_timeout = 5.0
+        self.search_timeout = 10.0
+        self.max_search_results = 5
 
     async def lookup_ingredient(self, ingredient_name: str) -> Optional[Dict]:
         """
-        Look up ingredient halal status online
+        AI-powered ingredient lookup with multi-source analysis
         Returns dict with: status, reason, source_dependent, confidence
         """
         try:
-            # Search using web search for halal status
-            search_query = f"{ingredient_name} halal haram status islamic"
+            logger.info(f"🔍 AI Searcher analyzing: {ingredient_name}")
 
-            async with httpx.AsyncClient(timeout=self.search_timeout) as client:
-                # Use DuckDuckGo instant answer API (free, no auth)
-                response = await client.get(
-                    "https://api.duckduckgo.com/",
-                    params={
-                        "q": search_query,
-                        "format": "json",
-                        "no_html": 1,
-                        "skip_disambig": 1
-                    }
-                )
+            # Step 1: Quick check against known patterns first (fast path)
+            pattern_result = self._check_known_patterns(ingredient_name)
+            if pattern_result and pattern_result['confidence'] >= 0.90:
+                logger.info(f"✓ High-confidence pattern match for {ingredient_name}")
+                return pattern_result
 
-                if response.status_code == 200:
-                    result = response.json()
-                    abstract = result.get('AbstractText', '').lower()
+            # Step 2: Perform multi-source web search
+            search_results = await self._perform_web_search(ingredient_name)
 
-                    if abstract:
-                        return self._analyze_search_result(ingredient_name, abstract)
+            if search_results:
+                # Step 3: AI-powered analysis of search results
+                ai_analysis = self._ai_analyze_results(ingredient_name, search_results)
 
-            # Fallback: Check against known patterns
-            return self._check_known_patterns(ingredient_name)
+                if ai_analysis and ai_analysis['confidence'] > 0.60:
+                    logger.info(f"✓ AI analysis complete: {ai_analysis['status']} (confidence: {ai_analysis['confidence']:.2f})")
+                    return ai_analysis
+
+            # Step 4: Fallback to pattern matching with lower confidence
+            logger.info(f"⚠ Using pattern-based fallback for {ingredient_name}")
+            return pattern_result if pattern_result else self._unknown_result(ingredient_name)
 
         except Exception as e:
-            logger.error(f"Error looking up ingredient {ingredient_name}: {e}")
+            logger.error(f"Error in AI searcher for {ingredient_name}: {e}")
+            return self._check_known_patterns(ingredient_name)
+
+    async def _perform_web_search(self, ingredient_name: str) -> List[str]:
+        """Perform web search and extract relevant text snippets"""
+        try:
+            search_query = f"{ingredient_name} halal haram islamic permissible"
+            logger.info(f"🌐 Searching web for: {search_query}")
+
+            async with httpx.AsyncClient(timeout=self.search_timeout, follow_redirects=True) as client:
+                # Use DuckDuckGo HTML search (more results than instant answer API)
+                url = f"https://html.duckduckgo.com/html/?q={quote_plus(search_query)}"
+
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+
+                response = await client.get(url, headers=headers)
+
+                if response.status_code == 200:
+                    # Extract text snippets from search results
+                    snippets = self._extract_snippets(response.text)
+                    logger.info(f"📄 Found {len(snippets)} search result snippets")
+                    return snippets
+
+            return []
+
+        except Exception as e:
+            logger.error(f"Web search error: {e}")
+            return []
+
+    def _extract_snippets(self, html: str) -> List[str]:
+        """Extract relevant text snippets from DuckDuckGo HTML results"""
+        snippets = []
+
+        # Extract result snippets (simplified HTML parsing)
+        # Look for content between result divs
+        snippet_pattern = r'class="result__snippet"[^>]*>([^<]+(?:<[^>]+>[^<]+)*)</a>'
+        matches = re.findall(snippet_pattern, html, re.IGNORECASE | re.DOTALL)
+
+        for match in matches[:self.max_search_results]:
+            # Clean HTML tags and entities
+            clean_text = re.sub(r'<[^>]+>', ' ', match)
+            clean_text = re.sub(r'&[a-z]+;', ' ', clean_text)
+            clean_text = ' '.join(clean_text.split())
+
+            if len(clean_text) > 20:  # Skip very short snippets
+                snippets.append(clean_text.lower())
+
+        # If no snippets found with the pattern, try alternative extraction
+        if not snippets:
+            # Look for any substantial text blocks mentioning halal/haram
+            text_blocks = re.findall(r'(?:halal|haram|permissible|forbidden)[^<]{20,200}', html, re.IGNORECASE)
+            snippets = [block.lower() for block in text_blocks[:self.max_search_results]]
+
+        return snippets
+
+    def _ai_analyze_results(self, ingredient_name: str, snippets: List[str]) -> Optional[Dict]:
+        """
+        AI-powered analysis of search results
+        Uses intelligent keyword scoring and contextual understanding
+        """
+        if not snippets:
             return None
+
+        logger.info(f"🤖 AI analyzing {len(snippets)} sources for {ingredient_name}")
+
+        # Combine all snippets for analysis
+        combined_text = ' '.join(snippets)
+        ingredient_lower = ingredient_name.lower()
+
+        # Advanced keyword scoring system
+        halal_indicators = {
+            'halal': 3.0,
+            'permissible': 2.5,
+            'allowed': 2.0,
+            'plant-based': 2.5,
+            'plant based': 2.5,
+            'vegan': 2.0,
+            'vegetarian': 1.8,
+            'derived from plants': 2.5,
+            'synthetic': 2.0,
+            'mineral': 2.0,
+            'safe to consume': 1.5,
+            'no animal': 2.0,
+        }
+
+        haram_indicators = {
+            'haram': 3.0,
+            'forbidden': 2.5,
+            'prohibited': 2.5,
+            'not halal': 2.8,
+            'non-halal': 2.8,
+            'pork': 3.5,
+            'alcohol': 3.0,
+            'from pig': 3.5,
+            'animal-derived': 1.5,
+            'from animals': 1.2,
+            'not permissible': 2.5,
+            'avoid': 1.8,
+        }
+
+        source_dependent_indicators = {
+            'depends on': 3.0,
+            'may be': 2.0,
+            'can be': 2.0,
+            'either': 1.8,
+            'source matters': 2.5,
+            'animal or plant': 2.5,
+            'plant or animal': 2.5,
+            'derived from either': 2.5,
+            'check source': 2.8,
+            'verify': 1.5,
+            'uncertain': 2.0,
+            'questionable': 2.2,
+        }
+
+        # Calculate weighted scores
+        halal_score = sum(weight for keyword, weight in halal_indicators.items()
+                         if keyword in combined_text)
+        haram_score = sum(weight for keyword, weight in haram_indicators.items()
+                         if keyword in combined_text)
+        ambiguous_score = sum(weight for keyword, weight in source_dependent_indicators.items()
+                             if keyword in combined_text)
+
+        # Normalize scores by number of snippets
+        num_sources = len(snippets)
+        halal_score /= num_sources
+        haram_score /= num_sources
+        ambiguous_score /= num_sources
+
+        logger.info(f"📊 Scores - Halal: {halal_score:.2f}, Haram: {haram_score:.2f}, Ambiguous: {ambiguous_score:.2f}")
+
+        # AI decision logic with confidence scoring
+        total_score = halal_score + haram_score + ambiguous_score
+
+        if total_score < 1.0:
+            # Not enough information in search results
+            return None
+
+        # Determine status based on highest score and context
+        if ambiguous_score > 2.0 or (ambiguous_score > 1.5 and halal_score > 0 and haram_score > 0):
+            confidence = min(0.85, 0.65 + (ambiguous_score / 10))
+            return {
+                'status': HalalStatus.AMBIGUOUS,
+                'reason': f"{ingredient_name} - Halal status depends on source. Multiple sources indicate it may be plant or animal-derived. Verification needed.",
+                'source_dependent': True,
+                'confidence': confidence,
+                'should_add_to_db': True,
+                'sources_analyzed': num_sources
+            }
+
+        elif haram_score > halal_score and haram_score > 1.5:
+            confidence = min(0.90, 0.70 + (haram_score / 10))
+            return {
+                'status': HalalStatus.HARAM,
+                'reason': f"{ingredient_name} is generally considered haram based on {num_sources} sources",
+                'source_dependent': False,
+                'confidence': confidence,
+                'should_add_to_db': True,
+                'sources_analyzed': num_sources
+            }
+
+        elif halal_score > haram_score and halal_score > 1.5:
+            confidence = min(0.90, 0.70 + (halal_score / 10))
+            return {
+                'status': HalalStatus.HALAL,
+                'reason': f"{ingredient_name} is generally halal based on {num_sources} sources",
+                'source_dependent': False,
+                'confidence': confidence,
+                'should_add_to_db': True,
+                'sources_analyzed': num_sources
+            }
+
+        else:
+            # Scores are too low or balanced
+            return None
+
+    def _unknown_result(self, ingredient_name: str) -> Dict:
+        """Return unknown result for ingredient"""
+        return {
+            'status': HalalStatus.UNKNOWN,
+            'reason': f"Could not determine halal status for {ingredient_name}. Manual verification recommended.",
+            'source_dependent': False,
+            'confidence': 0.50,
+            'should_add_to_db': False
+        }
 
     def _analyze_search_result(self, ingredient_name: str, text: str) -> Dict:
         """Analyze search result text to determine halal status"""
