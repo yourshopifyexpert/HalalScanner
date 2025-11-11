@@ -8,6 +8,7 @@ from app.schemas import (
     NormalizedIngredient, ClassificationResult
 )
 from app.services.rules_engine import RulesEngine
+from app.services.ingredient_lookup import IngredientLookupService
 from app.models import HalalCertification, Manufacturer
 from app.config import settings
 
@@ -30,6 +31,7 @@ class IngredientClassifier:
     def __init__(self, db: Session):
         self.db = db
         self.rules_engine = RulesEngine(db)
+        self.lookup_service = IngredientLookupService(db)
         self.ml_model = None  # Placeholder for ML model
 
     async def classify(
@@ -52,6 +54,36 @@ class IngredientClassifier:
         evidence_list = []
         for ingredient in ingredients:
             evidence = self.rules_engine.classify_ingredient(ingredient)
+
+            # If ingredient is UNKNOWN, try online lookup
+            if evidence.status == HalalStatus.UNKNOWN:
+                logger.info(f"Ingredient '{ingredient.canonical}' not in database, looking up online...")
+
+                lookup_result = await self.lookup_service.lookup_ingredient(ingredient.canonical)
+
+                if lookup_result:
+                    logger.info(f"Online lookup result for '{ingredient.canonical}': {lookup_result['status']}")
+
+                    # Update evidence with lookup result
+                    evidence = IngredientEvidence(
+                        ingredient=ingredient.original,
+                        normalized_name=ingredient.canonical,
+                        status=lookup_result['status'],
+                        reason=lookup_result['reason'],
+                        rule_name="ONLINE_LOOKUP",
+                        confidence=lookup_result['confidence']
+                    )
+
+                    # Add to database if it's a confirmed halal/haram/ambiguous ingredient
+                    if lookup_result.get('should_add_to_db', False):
+                        self.lookup_service.add_ingredient_to_database(
+                            canonical_name=ingredient.canonical,
+                            aliases=[ingredient.original.lower(), ingredient.canonical.lower()],
+                            halal_status=lookup_result['status'],
+                            notes=f"Auto-discovered via online lookup. {lookup_result['reason']}"
+                        )
+                        logger.info(f"Added '{ingredient.canonical}' to database with status {lookup_result['status']}")
+
             evidence_list.append(evidence)
 
         # Step 2: Check for halal certification
