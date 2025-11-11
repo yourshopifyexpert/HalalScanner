@@ -6,19 +6,26 @@ from sqlalchemy.orm import Session
 
 from app.schemas import NormalizedIngredient
 from app.models import IngredientMaster
+from app.services.ocr_cleanup import OCRCleanupService
 
 logger = logging.getLogger(__name__)
 
 
 class IngredientNormalizer:
-    """Simplified ingredient normalizer for demo"""
+    """Simplified ingredient normalizer with AI-powered OCR cleanup"""
 
     def __init__(self, db: Session):
         self.db = db
+        self.ocr_cleanup = OCRCleanupService()
 
     async def normalize(self, text: str) -> List[NormalizedIngredient]:
         """Normalize ingredient text into structured tokens"""
         try:
+            # STEP 1: AI-powered OCR cleanup
+            logger.info(f"Original OCR text: {text[:100]}...")
+            text = await self.ocr_cleanup.cleanup_ocr_text(text)
+            logger.info(f"After AI cleanup: {text[:100]}...")
+
             # Extract ingredients section from full text
             text_lower = text.lower()
 
@@ -91,16 +98,44 @@ class IngredientNormalizer:
 
     def _balance_parentheses(self, text: str, missing_closes: int) -> str:
         """
-        Balance unbalanced parentheses by adding closing parens at logical positions
-        Strategy: Look for ingredient boundaries (patterns like "CONTAINS X% OR LESS OF:")
-        or add all closing parens at the end to preserve sub-ingredient lists
+        Balance unbalanced parentheses by detecting ingredient boundaries
+        Common patterns: ", WATER", ", VEGETABLE", "CONTAINS X%", etc.
         """
-        # Simple approach: add all missing ) at the end to avoid breaking sub-ingredient lists
-        # This preserves structures like "FLOUR (WHEAT, BARLEY)" as a single ingredient
-        fixed_text = text + (')' * missing_closes)
+        result = []
+        paren_depth = 0
+        closes_to_add = missing_closes
 
-        logger.info(f"Fixed unbalanced parentheses: added {missing_closes} closing parens at end")
-        return fixed_text
+        # Ingredient boundary patterns (new ingredient likely starts after these)
+        boundary_patterns = [
+            r'),\s+WATER\b',
+            r'),\s+VEGETABLE\b',
+            r'),\s+SALT\b',
+            r'),\s+SUGAR\b',
+            r'\bACID,\s+WATER\b',  # Common: "FOLIC ACID, WATER"
+            r'\bACID,\s+VEGETABLE\b',
+        ]
+
+        text_str = text
+
+        # Look for ingredient boundaries and add ) before them
+        import re as regex_module
+        for pattern in boundary_patterns:
+            # Find positions where pattern matches
+            match = regex_module.search(pattern, text_str, regex_module.IGNORECASE)
+            if match and closes_to_add > 0:
+                # Add ) before the boundary
+                pos = match.start() + match.group().index(',')
+                text_str = text_str[:pos] + ')' * closes_to_add + text_str[pos:]
+                logger.info(f"Added {closes_to_add} ) before '{match.group()}'")
+                closes_to_add = 0
+                break
+
+        # If no pattern matched, add remaining ) at the end
+        if closes_to_add > 0:
+            text_str = text_str + ')' * closes_to_add
+            logger.info(f"Added {closes_to_add} ) at end (no boundary pattern found)")
+
+        return text_str
 
     def _split_ingredients(self, text: str) -> List[str]:
         """
