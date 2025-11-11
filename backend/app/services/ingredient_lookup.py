@@ -107,27 +107,50 @@ class IngredientLookupService:
         plant_based = [
             'flour', 'sugar', 'salt', 'water', 'oil', 'starch', 'vinegar',
             'vegetable', 'fruit', 'grain', 'rice', 'wheat', 'corn', 'soy',
-            'tomato', 'potato', 'onion', 'garlic', 'pepper', 'herb', 'spice'
+            'tomato', 'potato', 'onion', 'garlic', 'pepper', 'herb', 'spice',
+            'citric', 'ascorbic', 'acid', 'turmeric', 'ginger', 'cinnamon',
+            'maltodextrin', 'dextrose', 'glucose', 'fructose', 'syrup',
+            'xanthan', 'guar', 'gum', 'pectin', 'agar', 'carrageenan',
+            'cellulose', 'beta', 'carotene', 'annatto', 'paprika', 'saffron'
         ]
 
         # Definitely haram
         haram_ingredients = [
-            'pork', 'bacon', 'ham', 'lard', 'alcohol', 'wine', 'beer',
-            'gelatin', 'pepsin', 'rennet', 'carmine', 'blood'
+            'pork', 'bacon', 'ham', 'lard', 'alcohol', 'wine', 'beer', 'rum',
+            'gelatin', 'pepsin', 'rennet', 'carmine', 'blood', 'plasma'
         ]
 
-        # Source-dependent (ambiguous)
+        # Source-dependent (ambiguous) - needs verification
         ambiguous_ingredients = [
             'enzyme', 'emulsifier', 'glycerin', 'glycerol', 'mono', 'diglyceride',
-            'lecithin', 'shortening', 'vitamin', 'flavor', 'flavoring'
+            'lecithin', 'shortening', 'vitamin d', 'vitamin a', 'flavor', 'flavoring',
+            'whey', 'casein', 'lactose', 'lipase', 'trypsin'
         ]
+
+        # E-numbers that are always halal (plant/mineral/synthetic)
+        halal_e_numbers = {
+            'e300': 'ascorbic acid', 'e330': 'citric acid', 'e440': 'pectin',
+            'e415': 'xanthan gum', 'e412': 'guar gum', 'e407': 'carrageenan',
+            'e100': 'curcumin/turmeric', 'e160': 'carotenoids', 'e500': 'sodium carbonate'
+        }
+
+        # Check E-numbers
+        for e_num, name in halal_e_numbers.items():
+            if e_num in name_lower:
+                return {
+                    'status': HalalStatus.HALAL,
+                    'reason': f"{ingredient_name} ({name}) is plant/mineral-based, therefore halal",
+                    'source_dependent': False,
+                    'confidence': 0.90,
+                    'should_add_to_db': True
+                }
 
         # Check if matches any pattern
         for plant in plant_based:
             if plant in name_lower:
                 return {
                     'status': HalalStatus.HALAL,
-                    'reason': f"{ingredient_name} is plant-based, therefore halal",
+                    'reason': f"{ingredient_name} is plant-based/synthetic, therefore halal",
                     'source_dependent': False,
                     'confidence': 0.90,
                     'should_add_to_db': True
@@ -147,7 +170,7 @@ class IngredientLookupService:
             if ambig in name_lower:
                 return {
                     'status': HalalStatus.AMBIGUOUS,
-                    'reason': f"{ingredient_name} may be plant or animal-derived. Source verification needed.",
+                    'reason': f"{ingredient_name} - Halal status depends on source. May be plant or animal-derived. Verification needed.",
                     'source_dependent': True,
                     'confidence': 0.80,
                     'should_add_to_db': True
