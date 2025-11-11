@@ -29,7 +29,7 @@ class IngredientLookupService:
 
             # Step 1: Quick check against known patterns first (fast path)
             pattern_result = self._check_known_patterns(ingredient_name)
-            if pattern_result and pattern_result['confidence'] >= 0.90:
+            if pattern_result and pattern_result['confidence'] >= 0.75:
                 logger.info(f"✓ High-confidence pattern match for {ingredient_name}")
                 return pattern_result
 
@@ -289,7 +289,7 @@ class IngredientLookupService:
         """Check ingredient against known patterns"""
         name_lower = ingredient_name.lower()
 
-        # Common plant-based ingredients (always halal)
+        # Common plant-based and synthetic ingredients (always halal)
         plant_based = [
             'flour', 'sugar', 'salt', 'water', 'oil', 'starch', 'vinegar',
             'vegetable', 'fruit', 'grain', 'rice', 'wheat', 'corn', 'soy',
@@ -301,7 +301,9 @@ class IngredientLookupService:
             'sorbate', 'benzoate', 'potassium', 'sodium', 'calcium', 'magnesium',
             'bicarbonate', 'carbonate', 'phosphate', 'sulfate', 'chloride',
             'preservative', 'erythritol', 'stevia', 'sucralose', 'aspartame',
-            'polysorbate', 'sorbitan', 'tocopherol', 'modified starch'
+            'polysorbate', 'sorbitan', 'tocopherol', 'modified starch', 'taurine',
+            'caffeine', 'creatine', 'niacin', 'riboflavin', 'thiamine',
+            'pyridoxine', 'folate', 'biotin', 'cobalamin', 'inositol'
         ]
 
         # Definitely haram
