@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🌙 HalalScanner - Scan Products</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <style>
         * {
             margin: 0;
@@ -251,6 +252,127 @@
         .suggestions li {
             padding: 5px 0;
         }
+
+        /* Crop Modal Styles */
+        .crop-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            padding: 20px;
+            overflow: auto;
+        }
+
+        .crop-modal.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .crop-container {
+            max-width: 900px;
+            width: 100%;
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .crop-header {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .crop-header h2 {
+            font-size: 1.8em;
+            margin-bottom: 5px;
+        }
+
+        .crop-header p {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .crop-image-container {
+            max-height: 60vh;
+            margin-bottom: 20px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        #cropImage {
+            max-width: 100%;
+            display: block;
+        }
+
+        .crop-controls {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .crop-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: all 0.2s;
+        }
+
+        .crop-btn:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        .crop-btn.success {
+            background: #27ae60;
+            font-size: 1.1em;
+            padding: 12px 30px;
+        }
+
+        .crop-btn.success:hover {
+            background: #229954;
+        }
+
+        .crop-btn.cancel {
+            background: #e74c3c;
+        }
+
+        .crop-btn.cancel:hover {
+            background: #c0392b;
+        }
+
+        .crop-actions {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .crop-container {
+                padding: 15px;
+            }
+
+            .crop-controls {
+                flex-direction: column;
+            }
+
+            .crop-btn {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -265,6 +387,7 @@
                 <div class="upload-icon">📷</div>
                 <h3>Upload Product Image or Enter Ingredients</h3>
                 <p style="color: #666; margin-top: 10px;">Click to select an image or drag and drop</p>
+                <p style="color: #667eea; margin-top: 5px; font-size: 0.9em;">✂️ You can crop the image to select just the ingredients area</p>
                 <input type="file" id="fileInput" accept="image/*" capture="environment">
             </div>
 
@@ -293,6 +416,34 @@
         <div id="resultSection" class="hidden"></div>
     </div>
 
+    <!-- Crop Modal -->
+    <div id="cropModal" class="crop-modal">
+        <div class="crop-container">
+            <div class="crop-header">
+                <h2>✂️ Crop to Select Ingredients</h2>
+                <p>Drag and resize the box to select only the ingredients list area</p>
+            </div>
+
+            <div class="crop-image-container">
+                <img id="cropImage" src="" alt="Image to crop">
+            </div>
+
+            <div class="crop-controls">
+                <button class="crop-btn" onclick="rotateCrop(-90)">↺ Rotate Left</button>
+                <button class="crop-btn" onclick="rotateCrop(90)">↻ Rotate Right</button>
+                <button class="crop-btn" onclick="zoomCrop(0.1)">🔍 Zoom In</button>
+                <button class="crop-btn" onclick="zoomCrop(-0.1)">🔍 Zoom Out</button>
+                <button class="crop-btn" onclick="resetCrop()">⟲ Reset</button>
+            </div>
+
+            <div class="crop-actions">
+                <button class="crop-btn cancel" onclick="cancelCrop()">✖ Cancel</button>
+                <button class="crop-btn success" onclick="applyCrop()">✔ Scan This Area</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script>
         const uploadSection = document.getElementById('uploadSection');
         const fileInput = document.getElementById('fileInput');
@@ -300,6 +451,11 @@
         const loadingSection = document.getElementById('loadingSection');
         const resultSection = document.getElementById('resultSection');
         const scanBtn = document.getElementById('scanBtn');
+        const cropModal = document.getElementById('cropModal');
+        const cropImage = document.getElementById('cropImage');
+
+        let cropper = null;
+        let currentFileName = '';
 
         // Click to upload
         uploadSection.addEventListener('click', () => {
@@ -329,61 +485,133 @@
         // File selection
         fileInput.addEventListener('change', handleFileSelect);
 
-        let selectedImageBase64 = null;
-
         async function handleFileSelect() {
             const file = fileInput.files[0];
             if (file) {
+                currentFileName = file.name;
+
+                // Read image and show crop modal
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    // Set image source
+                    cropImage.src = e.target.result;
+
+                    // Show crop modal
+                    cropModal.classList.add('active');
+
+                    // Initialize cropper
+                    if (cropper) {
+                        cropper.destroy();
+                    }
+
+                    cropper = new Cropper(cropImage, {
+                        aspectRatio: NaN, // Free aspect ratio
+                        viewMode: 1,
+                        autoCropArea: 0.8,
+                        responsive: true,
+                        guides: true,
+                        center: true,
+                        highlight: true,
+                        cropBoxMovable: true,
+                        cropBoxResizable: true,
+                        toggleDragModeOnDblclick: false,
+                    });
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function rotateCrop(degrees) {
+            if (cropper) {
+                cropper.rotate(degrees);
+            }
+        }
+
+        function zoomCrop(ratio) {
+            if (cropper) {
+                cropper.zoom(ratio);
+            }
+        }
+
+        function resetCrop() {
+            if (cropper) {
+                cropper.reset();
+            }
+        }
+
+        function cancelCrop() {
+            cropModal.classList.remove('active');
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+            fileInput.value = ''; // Reset file input
+        }
+
+        async function applyCrop() {
+            if (!cropper) return;
+
+            // Show processing message
+            uploadSection.innerHTML = `
+                <div class="upload-icon">⏳</div>
+                <h3>Processing Image...</h3>
+                <p style="color: #667eea; margin-top: 10px;">Extracting text from cropped area</p>
+            `;
+
+            // Hide crop modal
+            cropModal.classList.remove('active');
+
+            try {
+                // Get cropped canvas
+                const canvas = cropper.getCroppedCanvas({
+                    maxWidth: 2048,
+                    maxHeight: 2048,
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high',
+                });
+
+                // Convert to base64
+                const croppedBase64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+
+                // Destroy cropper
+                cropper.destroy();
+                cropper = null;
+
+                // Call backend OCR to extract text
+                const response = await fetch('/api/v1/scan/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: 'web_user_' + Date.now(),
+                        image_base64: croppedBase64,
+                        language_hint: 'en'
+                    })
+                });
+
+                const data = await response.json();
+
+                // Update UI with extracted text
                 uploadSection.innerHTML = `
-                    <div class="upload-icon">⏳</div>
-                    <h3>Processing Image...</h3>
-                    <p style="color: #667eea; margin-top: 10px;">Extracting text from ${file.name}</p>
+                    <div class="upload-icon">✅</div>
+                    <h3>Text Extracted!</h3>
+                    <p style="color: #27ae60; margin-top: 10px;">${currentFileName} (cropped)</p>
                 `;
 
-                try {
-                    // Convert image to base64
-                    const reader = new FileReader();
-                    reader.onload = async function(e) {
-                        selectedImageBase64 = e.target.result.split(',')[1]; // Remove data:image/xxx;base64, prefix
+                // Fill text box with extracted ingredients
+                ingredientsInput.value = data.ocr_text || "No text detected. Please enter ingredients manually.";
 
-                        // Call backend OCR to extract text
-                        const response = await fetch('/api/v1/scan/', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                user_id: 'web_user_' + Date.now(),
-                                image_base64: selectedImageBase64,
-                                language_hint: 'en'
-                            })
-                        });
-
-                        const data = await response.json();
-
-                        // Update UI with extracted text
-                        uploadSection.innerHTML = `
-                            <div class="upload-icon">✅</div>
-                            <h3>Text Extracted!</h3>
-                            <p style="color: #27ae60; margin-top: 10px;">${file.name}</p>
-                        `;
-
-                        // Fill text box with extracted ingredients
-                        ingredientsInput.value = data.ocr_text || "No text detected. Please enter ingredients manually.";
-
-                        // Automatically display results
-                        displayResult(data);
-                        resultSection.classList.remove('hidden');
-                    };
-                    reader.readAsDataURL(file);
-                } catch (error) {
-                    uploadSection.innerHTML = `
-                        <div class="upload-icon">❌</div>
-                        <h3>OCR Failed</h3>
-                        <p style="color: #e74c3c; margin-top: 10px;">Please enter ingredients manually</p>
-                    `;
-                    console.error('OCR Error:', error);
-                }
+                // Automatically display results
+                displayResult(data);
+                resultSection.classList.remove('hidden');
+            } catch (error) {
+                uploadSection.innerHTML = `
+                    <div class="upload-icon">❌</div>
+                    <h3>OCR Failed</h3>
+                    <p style="color: #e74c3c; margin-top: 10px;">Please enter ingredients manually</p>
+                `;
+                console.error('OCR Error:', error);
             }
         }
 
