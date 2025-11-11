@@ -89,14 +89,63 @@ class IngredientNormalizer:
             logger.error(f"Normalization failed: {e}")
             return []
 
+    def _balance_parentheses(self, text: str, missing_closes: int) -> str:
+        """
+        Balance unbalanced parentheses by adding closing parens at logical positions
+        Strategy: Add ) before the next comma after an unclosed (
+        """
+        result = []
+        paren_depth = 0
+        closes_added = 0
+
+        for i, char in enumerate(text):
+            if char == '(':
+                paren_depth += 1
+                result.append(char)
+            elif char == ')':
+                paren_depth -= 1
+                result.append(char)
+            elif char == ',' and paren_depth > 0 and closes_added < missing_closes:
+                # Found a comma while inside unclosed parens - close them first
+                while paren_depth > 0 and closes_added < missing_closes:
+                    result.append(')')
+                    paren_depth -= 1
+                    closes_added += 1
+                result.append(char)
+            else:
+                result.append(char)
+
+        # Add any remaining closing parens at the end
+        while closes_added < missing_closes:
+            result.append(')')
+            closes_added += 1
+
+        fixed_text = ''.join(result)
+        logger.info(f"Fixed unbalanced parentheses: added {closes_added} closing parens")
+        return fixed_text
+
     def _split_ingredients(self, text: str) -> List[str]:
         """
         Split ingredient text by commas while respecting parentheses
         Example: "FLOUR (WHEAT, BARLEY), SALT, SUGAR" -> ["FLOUR (WHEAT, BARLEY)", "SALT", "SUGAR"]
+
+        Handles unbalanced parentheses from OCR errors
         """
         # First, normalize whitespace and remove trailing punctuation
         text = ' '.join(text.split())
         text = text.rstrip('.')
+
+        # Fix unbalanced parentheses (common OCR error)
+        open_count = text.count('(')
+        close_count = text.count(')')
+
+        if open_count > close_count:
+            # Add missing closing parentheses at reasonable positions
+            # Strategy: Look for ", " after an unclosed "(" and add ")" before it
+            text = self._balance_parentheses(text, open_count - close_count)
+        elif close_count > open_count:
+            # Remove extra closing parentheses
+            text = text.replace(')', '', close_count - open_count)
 
         ingredients = []
         current = []
