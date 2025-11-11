@@ -297,20 +297,26 @@ class IngredientLookupService:
             'citric', 'ascorbic', 'acid', 'turmeric', 'ginger', 'cinnamon',
             'maltodextrin', 'dextrose', 'glucose', 'fructose', 'syrup',
             'xanthan', 'guar', 'gum', 'pectin', 'agar', 'carrageenan',
-            'cellulose', 'beta', 'carotene', 'annatto', 'paprika', 'saffron'
+            'cellulose', 'beta', 'carotene', 'annatto', 'paprika', 'saffron',
+            'sorbate', 'benzoate', 'potassium', 'sodium', 'calcium', 'magnesium',
+            'bicarbonate', 'carbonate', 'phosphate', 'sulfate', 'chloride',
+            'preservative', 'erythritol', 'stevia', 'sucralose', 'aspartame',
+            'polysorbate', 'sorbitan', 'tocopherol', 'modified starch'
         ]
 
         # Definitely haram
         haram_ingredients = [
             'pork', 'bacon', 'ham', 'lard', 'alcohol', 'wine', 'beer', 'rum',
-            'gelatin', 'pepsin', 'rennet', 'carmine', 'blood', 'plasma'
+            'carmine', 'blood', 'plasma', 'liquor', 'vodka', 'whiskey'
         ]
 
         # Source-dependent (ambiguous) - needs verification
         ambiguous_ingredients = [
             'enzyme', 'emulsifier', 'glycerin', 'glycerol', 'mono', 'diglyceride',
             'lecithin', 'shortening', 'vitamin d', 'vitamin a', 'flavor', 'flavoring',
-            'whey', 'casein', 'lactose', 'lipase', 'trypsin'
+            'whey', 'casein', 'lactose', 'lipase', 'trypsin', 'gelatin', 'rennet',
+            'pepsin', 'e471', 'e472', 'e476', 'e481', 'stearate', 'stearic',
+            'l-cysteine', 'cysteine', 'lactase', 'protease', 'amylase'
         ]
 
         # E-numbers that are always halal (plant/mineral/synthetic)
