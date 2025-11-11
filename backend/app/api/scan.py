@@ -8,7 +8,7 @@ import logging
 
 from app.database import get_db
 from app.schemas import ScanRequest, ScanResponse
-from app.services.ocr_local import LocalChandraOCR
+from app.services.ocr_chandra import ChandraOCRService
 from app.services.normalizer_simple import IngredientNormalizer
 from app.services.classifier import IngredientClassifier
 from app.models import Scan, Product, User
@@ -46,8 +46,8 @@ async def scan_product(
         ocr_confidence = 1.0
 
         if not ocr_text and (request.image_base64 or request.image_url):
-            logger.info("Starting LOCAL Chandra OCR extraction...")
-            ocr_service = LocalChandraOCR()
+            logger.info("Starting OCR extraction with OCR.space...")
+            ocr_service = ChandraOCRService()
 
             try:
                 if request.image_base64:
