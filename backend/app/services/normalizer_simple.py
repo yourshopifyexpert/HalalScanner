@@ -92,36 +92,14 @@ class IngredientNormalizer:
     def _balance_parentheses(self, text: str, missing_closes: int) -> str:
         """
         Balance unbalanced parentheses by adding closing parens at logical positions
-        Strategy: Add ) before the next comma after an unclosed (
+        Strategy: Look for ingredient boundaries (patterns like "CONTAINS X% OR LESS OF:")
+        or add all closing parens at the end to preserve sub-ingredient lists
         """
-        result = []
-        paren_depth = 0
-        closes_added = 0
+        # Simple approach: add all missing ) at the end to avoid breaking sub-ingredient lists
+        # This preserves structures like "FLOUR (WHEAT, BARLEY)" as a single ingredient
+        fixed_text = text + (')' * missing_closes)
 
-        for i, char in enumerate(text):
-            if char == '(':
-                paren_depth += 1
-                result.append(char)
-            elif char == ')':
-                paren_depth -= 1
-                result.append(char)
-            elif char == ',' and paren_depth > 0 and closes_added < missing_closes:
-                # Found a comma while inside unclosed parens - close them first
-                while paren_depth > 0 and closes_added < missing_closes:
-                    result.append(')')
-                    paren_depth -= 1
-                    closes_added += 1
-                result.append(char)
-            else:
-                result.append(char)
-
-        # Add any remaining closing parens at the end
-        while closes_added < missing_closes:
-            result.append(')')
-            closes_added += 1
-
-        fixed_text = ''.join(result)
-        logger.info(f"Fixed unbalanced parentheses: added {closes_added} closing parens")
+        logger.info(f"Fixed unbalanced parentheses: added {missing_closes} closing parens at end")
         return fixed_text
 
     def _split_ingredients(self, text: str) -> List[str]:
