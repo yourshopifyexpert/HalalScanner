@@ -1,132 +1,120 @@
-"""AI-powered OCR text cleanup service"""
+"""Smart rule-based OCR text cleanup service"""
 import logging
-import httpx
-import os
+import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 class OCRCleanupService:
-    """Use AI to clean up OCR errors in ingredient text"""
+    """Smart rule-based OCR error correction (no external APIs needed)"""
 
     def __init__(self):
-        self.api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")
-        self.timeout = 15.0
+        # Common OCR misreads
+        self.common_corrections = {
+            # Single character misreads
+            r'\bA\s+SUGAR\b': 'SALT, SUGAR',
+            r'\bA\s+BAKING\b': 'SALT, BAKING',
+            r'\b0\s+': 'O ',  # Zero as O
+            r'\b1\s+': 'I ',  # One as I
+            r'\bRIGE\b': 'RICE',
+            r'\bSOYBEAN\s+01LS\b': 'SOYBEAN OILS',
+            r'\bFLOUR\b': 'FLOUR',
+
+            # Common ingredient typos
+            r'\bINTERESTERIFI[EÉ]D\b': 'INTERESTERIFIED',
+            r'\bHYDR0GENATED\b': 'HYDROGENATED',
+            r'\bS0DIUM\b': 'SODIUM',
+            r'\bCALGIUM\b': 'CALCIUM',
+            r'\bPR0PIONATE\b': 'PROPIONATE',
+            r'\bS0RBIC\b': 'SORBIC',
+            r'\bM0N0GLYCERIDES\b': 'MONOGLYCERIDES',
+            r'\bDIGLYGERIDES\b': 'DIGLYCERIDES',
+            r'\bTHIAMINE\s+M0N0NITRATE\b': 'THIAMINE MONONITRATE',
+        }
 
     async def cleanup_ocr_text(self, raw_ocr_text: str) -> str:
         """
-        Use AI to clean up OCR errors and format ingredient text properly
+        Smart rule-based OCR cleanup - 100% free, no APIs needed
 
         Fixes:
-        - Missing or unbalanced parentheses
-        - OCR character errors (A → SALT, etc.)
-        - Missing commas
+        - Common character misreads (0→O, 1→I, A→SALT)
+        - Missing/unbalanced parentheses
+        - Missing commas between ingredients
         - Spacing issues
         """
-        if not self.api_key:
-            logger.warning("No AI API key found - skipping AI cleanup")
+        text = raw_ocr_text
+
+        try:
+            logger.info("Starting rule-based OCR cleanup")
+
+            # Step 1: Fix common character substitutions
+            for pattern, replacement in self.common_corrections.items():
+                text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+            # Step 2: Fix unbalanced parentheses
+            text = self._fix_parentheses(text)
+
+            # Step 3: Fix missing commas (e.g., "ACID WATER" → "ACID, WATER")
+            text = self._fix_missing_commas(text)
+
+            # Step 4: Clean up spacing
+            text = re.sub(r'\s+', ' ', text).strip()
+
+            logger.info(f"OCR cleanup complete: {len(raw_ocr_text)} → {len(text)} chars")
+            return text
+
+        except Exception as e:
+            logger.error(f"OCR cleanup failed: {e}")
             return raw_ocr_text
 
-        try:
-            # Use Anthropic Claude API if available
-            if os.getenv("ANTHROPIC_API_KEY"):
-                return await self._cleanup_with_claude(raw_ocr_text)
-            elif os.getenv("OPENAI_API_KEY"):
-                return await self._cleanup_with_openai(raw_ocr_text)
-            else:
-                return raw_ocr_text
+    def _fix_parentheses(self, text: str) -> str:
+        """Fix unbalanced parentheses by detecting ingredient boundaries"""
+        open_count = text.count('(')
+        close_count = text.count(')')
 
-        except Exception as e:
-            logger.error(f"AI OCR cleanup failed: {e}")
-            return raw_ocr_text  # Return original on error
-
-    async def _cleanup_with_claude(self, text: str) -> str:
-        """Clean up OCR text using Claude API"""
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key": os.getenv("ANTHROPIC_API_KEY"),
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json"
-                    },
-                    json={
-                        "model": "claude-3-haiku-20240307",
-                        "max_tokens": 1024,
-                        "messages": [{
-                            "role": "user",
-                            "content": f"""Fix OCR errors in this ingredient list. Common errors:
-- "A " might be "SALT, "
-- Missing closing parentheses
-- Missing commas between ingredients
-- Typos in ingredient names
-
-Return ONLY the corrected ingredient text, nothing else.
-
-OCR Text:
-{text}
-
-Corrected text:"""
-                        }]
-                    }
-                )
-
-                if response.status_code == 200:
-                    data = response.json()
-                    cleaned = data["content"][0]["text"].strip()
-                    logger.info(f"Claude cleaned OCR text: {len(text)} → {len(cleaned)} chars")
-                    return cleaned
-                else:
-                    logger.error(f"Claude API error: {response.status_code}")
-                    return text
-
-        except Exception as e:
-            logger.error(f"Claude cleanup error: {e}")
+        if open_count == close_count:
             return text
 
-    async def _cleanup_with_openai(self, text: str) -> str:
-        """Clean up OCR text using OpenAI API"""
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": "gpt-3.5-turbo",
-                        "messages": [{
-                            "role": "user",
-                            "content": f"""Fix OCR errors in this ingredient list. Common errors:
-- "A " might be "SALT, "
-- Missing closing parentheses
-- Missing commas between ingredients
-- Typos in ingredient names
+        if open_count > close_count:
+            # Missing closing parens - find logical places to add them
+            # Look for patterns like "ACID, WATER" or "ACID), CONTAINS"
+            missing = open_count - close_count
 
-Return ONLY the corrected ingredient text, nothing else.
+            # Strategy: Add ) before ", WATER" or ", VEGETABLE" etc.
+            patterns = [
+                (r'(ACID|IRON|RIBOFLAVIN|NIACIN),\s+(WATER|VEGETABLE|SALT)', r'\1),\2'),
+            ]
 
-OCR Text:
-{text}
+            for pattern, replacement in patterns:
+                if missing > 0:
+                    new_text = re.sub(pattern, replacement, text, count=missing, flags=re.IGNORECASE)
+                    if new_text != text:
+                        text = new_text
+                        missing = text.count('(') - text.count(')')
 
-Corrected text:"""
-                        }],
-                        "temperature": 0.1,
-                        "max_tokens": 500
-                    }
-                )
+            # If still missing, add at end
+            if missing > 0:
+                text = text + (')' * missing)
+                logger.info(f"Added {missing} closing parentheses")
 
-                if response.status_code == 200:
-                    data = response.json()
-                    cleaned = data["choices"][0]["message"]["content"].strip()
-                    logger.info(f"OpenAI cleaned OCR text: {len(text)} → {len(cleaned)} chars")
-                    return cleaned
-                else:
-                    logger.error(f"OpenAI API error: {response.status_code}")
-                    return text
+        return text
 
-        except Exception as e:
-            logger.error(f"OpenAI cleanup error: {e}")
-            return text
+    def _fix_missing_commas(self, text: str) -> str:
+        """Add missing commas between ingredients"""
+        # Pattern: "WORD WORD, CAPITALIZED_WORD" → "WORD WORD, CAPITALIZED_WORD"
+        # Look for patterns like "ACID WATER" → "ACID, WATER"
+
+        # Common ingredient starts that should have comma before them
+        ingredient_starts = [
+            'WATER', 'SALT', 'SUGAR', 'VEGETABLE', 'FLOUR', 'OIL',
+            'VITAMIN', 'CALCIUM', 'SODIUM', 'POTASSIUM', 'IRON'
+        ]
+
+        for ing_start in ingredient_starts:
+            # Pattern: "SOME_WORD INGREDIENT_START" → "SOME_WORD, INGREDIENT_START"
+            # But not inside parentheses
+            pattern = r'([A-Z]{3,})\s+(' + ing_start + r'\b)'
+            text = re.sub(pattern, r'\1, \2', text)
+
+        return text
